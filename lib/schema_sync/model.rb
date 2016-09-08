@@ -17,6 +17,11 @@ module SchemaSync
         schema_fields[name] = opts.merge(name: name, table_name: self.table_name, schema_type: schema_type)
       end
 
+      def index(fields, opts={})
+        fields = [fields] if !fields.is_a?(Array)
+        schema_indexes[fields] = opts.merge(table_name: self.table_name, fields: fields, columns: fields.collect(&:to_s))
+      end
+
       def timestamps!(opts={})
         field :created_at, type: Time
         field :updated_at, type: Time
@@ -24,6 +29,10 @@ module SchemaSync
 
       def schema_fields
         @schema_fields ||= {}
+      end
+
+      def schema_indexes
+        @schema_indexes ||= {}
       end
 
       def schema_enhancements

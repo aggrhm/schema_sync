@@ -47,15 +47,15 @@ module SchemaSync
   # be done through a manual migration.
   #
   def self.compute_changes(opts={})
-    do_cleanup = opts[:clean] || false
+    do_cleanup = opts[:clean]==true || false
     puts "Loading all models..."
     self.load_models
-    puts "Computing changes..."
+    puts "Computing changes... (cleanup: #{do_cleanup})"
     changes = []
     existing_table_names = ActiveRecord::Base.connection.tables - ["schema_migrations"]
     model_table_names = self.models.collect {|m| m.table_name}
+    active_columns = self.active_columns
     schema_columns = self.schema_columns
-    model_columns = self.model_columns
 
     # determine tables needed to add (in models but not in database)
     add_table_names = model_table_names - existing_table_names
@@ -64,8 +64,8 @@ module SchemaSync
     end
 
     # determine columns needed to add
-    model_columns.each do |key, c|
-      if !(sc = schema_columns[key]).nil?
+    schema_columns.each do |key, c|
+      if !(sc = active_columns[key]).nil?
         # TODO: column exists, check if needs changes
         # check if type or default changed
       else
@@ -73,10 +73,20 @@ module SchemaSync
       end
     end
 
+    # determine indexes needed to add
+    schema_indexes.each do |key, idx|
+      if !(sc = active_indexes[key]).nil?
+        # TODO: index exists, check if needs changes
+        # check if type or default changed
+      else
+        changes << {action: :add_index, table_name: idx[:table_name], index: idx}
+      end
+    end
+
     # determine enhancements needed
     self.models.each do |m|
       m.schema_enhancements.each do |e|
-        # TODO: handle indexes here
+        # TODO: handle enhancements here
       end
     end
 
@@ -87,13 +97,21 @@ module SchemaSync
         changes << {action: :drop_table, table_name: t}
       end
 
-      # determine fields that can be removed
-      schema_columns.each do |key, c|
+      # determine active fields that can be removed
+      active_columns.each do |key, c|
         next if c[:name] == 'id'
-        if model_columns[key].nil? && !remove_table_names.include?(c[:table_name]) && !model_columns.values.any?{|mc| mc[:table_name] == c[:table_name] && mc[:rename_from] && mc[:rename_from].to_s == c[:name].to_s}
+        next if remove_table_names.include?(c[:table_name])
+        if schema_columns[key].nil? && !schema_columns.values.any?{|mc| mc[:table_name] == c[:table_name] && mc[:rename_from] && mc[:rename_from].to_s == c[:name].to_s}
           changes << {action: :remove_column, table_name: c[:table_name], column: c[:column]}
         end
+      end
 
+      # determine active indexes that can be removed
+      active_indexes.each do |key, idx|
+        next if remove_table_names.include?(idx[:table_name])
+        if schema_indexes[key].nil?
+          changes << {action: :remove_index, table_name: c[:table_name], columns: c[:columns]}
+        end
       end
 
     end
@@ -101,7 +119,7 @@ module SchemaSync
     return changes
   end
 
-  def self.schema_columns
+  def self.active_columns
     ret = {}
     self.models.each do |m|
       next if !m.table_exists?
@@ -113,13 +131,36 @@ module SchemaSync
     return ret
   end
 
-  def self.model_columns
+  def self.schema_columns
     ret = {}
     self.models.each do |m|
       tn = m.table_name
       m.schema_fields.values.each do |f|
         k = "#{tn}/#{f[:name]}"
         ret[k] = f
+      end
+    end
+    return ret
+  end
+
+  def self.active_indexes
+    ret = {}
+    self.models.each do |m|
+      next if !m.table_exists?
+      tn = m.table_name
+      ActiveRecord::Base.connection.indexes(tn).each do |idx|
+        ret["#{tn}/#{idx.columns.join("|")}"] = {table_name: tn, columns: idx.columns}
+      end
+    end
+    return ret
+  end
+
+  def self.schema_indexes
+    ret = {}
+    self.models.each do |m|
+      tn = m.table_name
+      m.schema_indexes.values.each do |idx|
+        ret["#{tn}/#{idx[:columns].join("|")}"] = idx
       end
     end
     return ret
@@ -154,6 +195,16 @@ module SchemaSync
       when :remove_column
         cl = c[:column]
         s << "remove_column :#{c[:table_name]}, :#{cl.name}"
+      when :add_index
+        idx = c[:index]
+        iopts = idx.except(:table_name, :fields, :columns)
+        s << "add_index :#{idx[:table_name]}, #{idx[:fields].to_s}"
+        if !iopts.empty?
+          s << ", #{iopts}"
+        end
+      when :remove_index
+        idx = c[:index]
+        s << "remove_index :#{c[:table_name]}, #{idx[:fields].to_s}"
       when :add_timestamps
         s << "add_timestamps :#{c[:table_name]}"
         copts = c[:opts]

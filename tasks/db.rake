@@ -2,7 +2,7 @@ namespace :db do
 
   task :sync => :environment do
     do_cleanup = ENV['clean'] == 'true'
-    changes = SchemaSync.compute_changes(clean: true)
+    changes = SchemaSync.compute_changes(clean: do_cleanup)
     if changes.empty?
       puts "The schema is up-to-date."
       next
