@@ -110,7 +110,7 @@ module SchemaSync
       active_indexes.each do |key, idx|
         next if remove_table_names.include?(idx[:table_name])
         if schema_indexes[key].nil?
-          changes << {action: :remove_index, table_name: c[:table_name], columns: c[:columns]}
+          changes << {action: :remove_index, table_name: idx[:table_name], columns: idx[:columns], index: idx}
         end
       end
 
@@ -149,7 +149,7 @@ module SchemaSync
       next if !m.table_exists?
       tn = m.table_name
       ActiveRecord::Base.connection.indexes(tn).each do |idx|
-        ret["#{tn}/#{idx.columns.join("|")}"] = {table_name: tn, columns: idx.columns}
+        ret["#{tn}/#{idx.columns.join("|")}"] = {table_name: tn, columns: idx.columns, name: idx.name}
       end
     end
     return ret
@@ -204,7 +204,7 @@ module SchemaSync
         end
       when :remove_index
         idx = c[:index]
-        s << "remove_index :#{c[:table_name]}, #{idx[:fields].to_s}"
+        s << "remove_index :#{c[:table_name]}, name: \"#{idx[:name].to_s}\""
       when :add_timestamps
         s << "add_timestamps :#{c[:table_name]}"
         copts = c[:opts]
