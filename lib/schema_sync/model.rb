@@ -11,9 +11,6 @@ module SchemaSync
       def field(name, opts)
         SchemaSync.register_model(self)
         schema_type = opts[:schema_type] || SchemaSync.schema_type_for(opts[:type])
-        if schema_type == :jsonb && opts[:default].is_a?(Hash)
-          opts[:default] = opts[:default].to_json
-        end
         schema_fields[name] = opts.merge(name: name, table_name: self.table_name, schema_type: schema_type)
       end
 
