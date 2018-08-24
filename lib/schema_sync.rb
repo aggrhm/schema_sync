@@ -183,7 +183,7 @@ module SchemaSync
         s << "drop_table :#{c[:table_name]}"
       when :add_column
         f = c[:field]
-        copts = f.except(:name, :type, :table_name, :schema_type)
+        copts = f.except(:name, :type, :table_name, :schema_type, :to_api, :scope)
         if f[:rename_from]
           s << "rename_column :#{f[:table_name]}, :#{f[:rename_from]}, :#{f[:name]}"
         else

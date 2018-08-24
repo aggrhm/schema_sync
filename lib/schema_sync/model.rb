@@ -12,6 +12,11 @@ module SchemaSync
         SchemaSync.register_model(self)
         schema_type = opts[:schema_type] || SchemaSync.schema_type_for(opts[:type])
         schema_fields[name] = opts.merge(name: name, table_name: self.table_name, schema_type: schema_type)
+        if opts[:scope] == true
+          scope "with_#{name}", lambda {|val|
+            where(name => val)
+          }
+        end
       end
 
       def index(fields, opts={})
@@ -20,8 +25,8 @@ module SchemaSync
       end
 
       def timestamps!(opts={})
-        field :created_at, type: Time
-        field :updated_at, type: Time
+        field :created_at, opts.merge(type: Time)
+        field :updated_at, opts.merge(type: Time)
       end
 
       def schema_fields
@@ -42,6 +47,23 @@ module SchemaSync
         cns.include?("created_at") && cns.include?("updated_at")
       end
 
+    end   ## END CLASS METHODS
+
+    def fields_to_api(opts={})
+      ret = {}
+      self.class.schema_fields.values.each do |field|
+        fname = field[:name]
+        aopts = field[:to_api]
+        next if aopts == false
+        val = self.send(fname)
+        if aopts.is_a?(Symbol)
+          val = val.send(aopts) if !val.nil?
+        elsif aopts.respond_to?(:call)
+          val = self.instance_exec(val, &aopts)
+        end
+        ret[fname] = val
+      end
+      return ret
     end
 
   end
