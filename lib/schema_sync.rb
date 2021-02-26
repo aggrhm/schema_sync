@@ -24,6 +24,8 @@ module SchemaSync
   
   def self.models_with_database(database)
     conf = ActiveRecord::Base.configurations[database]
+    raise "Configuration for database #{database} not found" if conf.nil?
+    conf = conf.symbolize_keys
     return self.models.select {|m|
       mc = m.connection_config
       mc[:host] == conf["host"] && mc[:port] == conf["port"] && mc[:database] == conf["database"]
