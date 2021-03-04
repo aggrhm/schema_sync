@@ -12,6 +12,10 @@ module SchemaSync
         SchemaSync.register_model(self)
         schema_type = opts[:schema_type] || SchemaSync.schema_type_for(opts[:type])
         schema_fields[name] = opts.merge(name: name, table_name: self.table_name, schema_type: schema_type)
+        if opts[:index].present?
+          iopts = opts[:index].is_a?(Hash) ? opts[:index] : {}
+          index(name.to_sym, iopts)
+        end
         if opts[:scope] == true
           scope "with_#{name}", lambda {|val|
             where(name => val)

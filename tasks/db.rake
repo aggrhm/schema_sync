@@ -14,10 +14,15 @@ namespace :db do
     puts "========= Confirm the migration: ========"
     puts ms[:text]
     puts "========================================="
+    if changes.none?{|c| c[:action] == :add_index}
+      print "\nWARNING: No indexes added. Are you sure no indexes are needed.? [y/N]: "
+      resp = STDIN.gets.chomp
+      next if resp.downcase != 'y'
+    end
 
     print "Write changes? [Y/n]: "
     resp = STDIN.gets.chomp
-    if resp == "Y" || resp == "y"
+    if resp.downcase == 'y'
       ms = SchemaSync.build_migrations(changes, {write: true, hash: rs, database: database})
       fn = ms[:filename]
       puts "Migration written to #{fn}."

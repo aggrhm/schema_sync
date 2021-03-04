@@ -28,7 +28,7 @@ module SchemaSync
     conf = conf.symbolize_keys
     return self.models.select {|m|
       mc = m.connection_config
-      mc[:host] == conf["host"] && mc[:port] == conf["port"] && mc[:database] == conf["database"]
+      mc[:host] == conf[:host] && mc[:port] == conf[:port] && mc[:database] == conf[:database]
     }
   end
 
@@ -238,7 +238,7 @@ module SchemaSync
         s << "drop_table :#{c[:table_name]}"
       when :add_column
         f = c[:field]
-        copts = f.except(:name, :type, :table_name, :schema_type, :to_api, :scope)
+        copts = f.except(:name, :type, :table_name, :schema_type, :to_api, :scope, :index)
         if f[:rename_from]
           s << "rename_column :#{f[:table_name]}, :#{f[:rename_from]}, :#{f[:name]}"
         else
@@ -253,7 +253,8 @@ module SchemaSync
       when :add_index
         idx = c[:index]
         iopts = idx.except(:table_name, :fields, :columns)
-        s << "add_index :#{idx[:table_name]}, #{idx[:fields].to_s}"
+        ifs = idx[:fields].length == 1 ? idx[:fields].first.inspect : idx[:fields].to_s
+        s << "add_index :#{idx[:table_name]}, #{ifs.to_s}"
         if !iopts.empty?
           s << ", #{iopts}"
         end
@@ -296,6 +297,8 @@ module SchemaSync
       :jsonb
     when "Float"
       :decimal
+    when "reference", "ref"
+      :bigint
     else
       type.to_s.downcase.to_sym
     end
