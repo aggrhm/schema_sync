@@ -163,7 +163,7 @@ module SchemaSync
     if database
       ret = self.base_models[database].connection.tables
     else
-      ret = ActiveRecord::Base.connection
+      ret = ActiveRecord::Base.connection.tables
     end
     return ret - ["schema_migrations"]
   end
