@@ -10,7 +10,7 @@ namespace :db do
       next
     end
     rs = SchemaSync.random_string(5)
-    ms = SchemaSync.build_migrations(changes, {write: false, hash: rs, database: database})
+    ms = SchemaSync.build_migrations(changes, {write: false, name: rs, database: database})
     puts "========= Confirm the migration: ========"
     puts ms[:text]
     puts "========================================="
@@ -20,10 +20,11 @@ namespace :db do
       next if resp.downcase != 'y'
     end
 
-    print "Write changes? [Y/n]: "
-    resp = STDIN.gets.chomp
-    if resp.downcase == 'y'
-      ms = SchemaSync.build_migrations(changes, {write: true, hash: rs, database: database})
+    print "Name this migration: "
+    mn = STDIN.gets.chomp
+    if mn.present?
+
+      ms = SchemaSync.build_migrations(changes, {write: true, name: mn, database: database})
       fn = ms[:filename]
       puts "Migration written to #{fn}."
 
