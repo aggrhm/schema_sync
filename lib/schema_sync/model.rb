@@ -8,6 +8,10 @@ module SchemaSync
 
     module ClassMethods
 
+      def has_table_options(opts)
+        schema_table_options.merge!(opts)
+      end
+
       def field(name, opts)
         SchemaSync.register_model(self)
         schema_type = opts[:schema_type] || SchemaSync.schema_type_for(opts[:type])
@@ -15,6 +19,12 @@ module SchemaSync
         if opts[:index].present?
           iopts = opts[:index].is_a?(Hash) ? opts[:index] : {}
           index(name.to_sym, iopts)
+        end
+        if opts[:foreign_key_to].present?
+          opts[:foreign_key] = {to_table: opts[:foreign_key_to]}
+        end
+        if opts[:foreign_key].present?
+          foreign_key(name.to_sym, opts[:foreign_key])
         end
         if opts[:scope] == true
           scope "with_#{name}", lambda {|val|
@@ -28,9 +38,17 @@ module SchemaSync
         schema_indexes[fields] = opts.merge(table_name: self.table_name, fields: fields, columns: fields.collect(&:to_s))
       end
 
+      def foreign_key(field, opts)
+        schema_foreign_keys[field] = opts.merge(table_name: self.table_name, column: field)
+      end
+
       def timestamps!(opts={})
         field :created_at, opts.merge(type: Time)
         field :updated_at, opts.merge(type: Time)
+      end
+
+      def schema_table_options
+        @schema_table_options ||= {}
       end
 
       def schema_fields
@@ -39,6 +57,10 @@ module SchemaSync
 
       def schema_indexes
         @schema_indexes ||= {}
+      end
+
+      def schema_foreign_keys
+        @schema_foreign_keys ||= {}
       end
 
       def schema_enhancements

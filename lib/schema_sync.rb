@@ -90,16 +90,18 @@ module SchemaSync
     changes = []
     models = db.nil? ? self.models : self.models_with_database(db)
     existing_table_names = self.existing_table_names(db)
-    model_table_names = models.collect {|m| m.table_name}
     active_columns = self.active_columns(models)
     schema_columns = self.schema_columns(models)
     active_indexes = self.active_indexes(models)
     schema_indexes = self.schema_indexes(models)
+    active_foreign_keys = self.active_foreign_keys(models)
+    schema_foreign_keys = self.schema_foreign_keys(models)
 
     # determine tables needed to add (in models but not in database)
-    add_table_names = model_table_names - existing_table_names
-    add_table_names.each do |t|
-      changes << {action: :create_table, table_name: t}
+    models.each do |m|
+      if !existing_table_names.include?(m.table_name)
+        changes << {action: :create_table, table_name: m.table_name, opts: m.schema_table_options}
+      end
     end
 
     # determine columns needed to add
@@ -116,11 +118,20 @@ module SchemaSync
     schema_indexes.each do |key, idx|
       if !(sc = active_indexes[key]).nil?
         # TODO: index exists, check if needs changes
-        # check if type or default changed
       else
         changes << {action: :add_index, table_name: idx[:table_name], index: idx}
       end
     end
+
+    # determine foreign keys to add
+    schema_foreign_keys.each do |key, fk|
+      if !(sc = active_foreign_keys[key]).nil?
+        # TODO: foreign_key exists, check if needs changes
+      else
+        changes << {action: :add_foreign_key, table_name: fk[:table_name], foreign_key: fk}
+      end
+    end
+
 
     # determine enhancements needed
     models.each do |m|
@@ -131,6 +142,7 @@ module SchemaSync
 
     if do_cleanup
       # determine tables that can be removed
+      model_table_names = models.collect {|m| m.table_name}
       remove_table_names = existing_table_names - model_table_names
       remove_table_names.each do |t|
         changes << {action: :drop_table, table_name: t}
@@ -165,7 +177,7 @@ module SchemaSync
     else
       ret = ActiveRecord::Base.connection.tables
     end
-    return ret - ["schema_migrations"]
+    return (ret - ["schema_migrations"]).to_set
   end
 
   def self.active_columns(models)
@@ -215,6 +227,29 @@ module SchemaSync
     return ret
   end
 
+  def self.active_foreign_keys(models)
+    ret = {}
+    models.each do |m|
+      next if !m.table_exists?
+      tn = m.table_name
+      m.connection.foreign_keys(tn).each do |fk|
+        ret["#{tn}/#{fk.options[:column]}"] = {table_name: tn, to_table: fk.to_table, column: fk.options[:column], name: fk.options[:name]}
+      end
+    end
+    return ret
+  end
+
+  def self.schema_foreign_keys(models)
+    ret = {}
+    models.each do |m|
+      tn = m.table_name
+      m.schema_foreign_keys.values.each do |fk|
+        ret["#{tn}/#{fk[:column]}"] = fk
+      end
+    end
+    return ret
+  end
+
   def self.build_migrations(changes, opts={})
     prompt = opts.key?(:prompt) ? opts[:prompt] : false
     write = opts.key?(:write) ? opts[:write] : false
@@ -234,11 +269,14 @@ module SchemaSync
       case c[:action]
       when :create_table
         s << "create_table :#{c[:table_name]}"
+        if !c[:opts].empty?
+          s << ", #{to_kwargs(c[:opts])}"
+        end
       when :drop_table
         s << "drop_table :#{c[:table_name]}"
       when :add_column
         f = c[:field]
-        copts = f.except(:name, :type, :table_name, :schema_type, :to_api, :scope, :index)
+        copts = f.except(:name, :type, :table_name, :schema_type, :to_api, :scope, :index, :foreign_key, :foreign_key_to)
         if f[:rename_from]
           s << "rename_column :#{f[:table_name]}, :#{f[:rename_from]}, :#{f[:name]}"
         else
@@ -261,6 +299,13 @@ module SchemaSync
       when :remove_index
         idx = c[:index]
         s << "remove_index :#{c[:table_name]}, name: \"#{idx[:name].to_s}\""
+      when :add_foreign_key
+        fk = c[:foreign_key]
+        iopts = fk.except(:table_name, :field, :to_table)
+        s << "add_foreign_key :#{c[:table_name]}, :#{fk[:to_table]}"
+        if !iopts.empty?
+          s << ", #{to_kwargs(iopts)}"
+        end
       when :add_timestamps
         s << "add_timestamps :#{c[:table_name]}"
         copts = c[:opts]
@@ -309,7 +354,7 @@ module SchemaSync
   end
 
   def self.to_kwargs(opts)
-    opts.collect {|k, v| "#{k}: #{v}"}.join(", ")
+    opts.collect {|k, v| "#{k}: #{v.inspect}"}.join(", ")
   end
 
 end
